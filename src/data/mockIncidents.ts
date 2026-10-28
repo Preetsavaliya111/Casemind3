@@ -1,4 +1,253 @@
-import { Incident, GraphNode, GraphEdge } from '../types';
+import { 
+  Incident, 
+  GraphNode, 
+  GraphEdge, 
+  UserProfile, 
+  KnowledgeArticle, 
+  AuditLogEntry, 
+  NotificationItem,
+  CopilotMessage
+} from '../types';
+
+export const TEAM_USERS: UserProfile[] = [
+  {
+    id: 'usr-1',
+    name: 'Elena Rostova',
+    role: 'ADMIN',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    email: 'e.rostova@enterprise.corp',
+    team: 'Tier-3 Command & Core SRE',
+    activeSince: '3 years'
+  },
+  {
+    id: 'usr-2',
+    name: 'Carlos Mendez',
+    role: 'MANAGER',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    email: 'c.mendez@enterprise.corp',
+    team: 'Payments & Streaming Reliability',
+    activeSince: '2 years'
+  },
+  {
+    id: 'usr-3',
+    name: 'Priya Sharma',
+    role: 'AGENT',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    email: 'p.sharma@enterprise.corp',
+    team: 'Data Platform Reliability',
+    activeSince: '1.5 years'
+  },
+  {
+    id: 'usr-4',
+    name: 'David Tanaka',
+    role: 'AGENT',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    email: 'd.tanaka@enterprise.corp',
+    team: 'Database Reliability',
+    activeSince: '2 years'
+  },
+  {
+    id: 'usr-5',
+    name: 'Liam Zhang',
+    role: 'AGENT',
+    avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&auto=format&fit=crop&q=80',
+    email: 'l.zhang@enterprise.corp',
+    team: 'Edge Ingress & Envoy',
+    activeSince: '1 year'
+  },
+  {
+    id: 'usr-6',
+    name: 'Auditor Guest',
+    role: 'VIEWER',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    email: 'auditor.guest@enterprise.corp',
+    team: 'Compliance & Read-Only Audit',
+    activeSince: '3 months'
+  }
+];
+
+export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: 'notif-1',
+    title: 'SLA Breach Warning: INC-8942',
+    message: 'Auth Gateway P0 incident has 18 minutes remaining until 99.9% monthly SLA breach threshold.',
+    timestamp: '2 mins ago',
+    unread: true,
+    type: 'CRITICAL',
+    linkIncidentId: 'INC-8942'
+  },
+  {
+    id: 'notif-2',
+    title: 'Runbook Step 2 Auto-Verified',
+    message: 'RB-AUTH-FAILOVER-09 step 2 applied ConfigMap REDIS_MAX_POOL=2000 successfully.',
+    timestamp: '6 mins ago',
+    unread: true,
+    type: 'SUCCESS',
+    linkIncidentId: 'INC-8942'
+  },
+  {
+    id: 'notif-3',
+    title: 'New Memory Match Identified',
+    message: 'CaseMind vector engine discovered 96.4% cosine similarity match with historical INC-7102.',
+    timestamp: '11 mins ago',
+    unread: false,
+    type: 'INFO',
+    linkIncidentId: 'INC-8942'
+  },
+  {
+    id: 'notif-4',
+    title: 'Kafka Consumer Lag Spike in us-west-2',
+    message: 'Partition 12 lag exceeded 45,000 messages on payment-consumer-worker fleet.',
+    timestamp: '35 mins ago',
+    unread: false,
+    type: 'WARN',
+    linkIncidentId: 'INC-8939'
+  }
+];
+
+export const INITIAL_KNOWLEDGE_ARTICLES: KnowledgeArticle[] = [
+  {
+    id: 'kb-204',
+    title: 'Architectural Guide: Handling Thundering Herds in Distributed Token Caches',
+    category: 'ARCHITECTURAL',
+    tags: ['Redis', 'JWT', 'Architecture', 'Caching', 'Thundering Herd'],
+    snippet: 'Always pair short TTL tokens with probabilistic early expiration (XFetch algorithm) and connection pool sizing >= 3x peak concurrent requests.',
+    fullContent: `## Executive Overview
+When migrating session tokens to tighter lifetimes (e.g. PCI-DSS 4.0 mandate reducing TTL from 3600s to 300s), synchronous client token refreshes can synchronize.
+
+### Problem Dynamics
+1. Synchronous expiration triggers concurrent token generation requests.
+2. Ingress worker pools saturate Redis max_connections.
+3. TCP socket queues hang, leading to 504 Gateway Timeouts on edge reverse proxies.
+
+### Grounded Mitigations
+- **Probabilistic Early Expiration (XFetch):** Client refreshes asynchronously at \`ttl - beta * delta * ln(random())\`.
+- **Dynamic Pool Sizing:** Scale Lettuce/Jedis pools dynamically with connection headroom >= 2000 connections.
+- **In-Memory Cache Jitter:** Cache validated public keys locally in node worker memory for 60 seconds with ±15s jitter.`,
+    author: 'Marcus Vance (Principal SRE)',
+    updatedAt: '2026-09-12',
+    relatedIncidents: ['INC-7102', 'INC-8942'],
+    documentType: 'MARKDOWN'
+  },
+  {
+    id: 'kb-118',
+    title: 'Kubernetes ConfigMap Dynamic Reload Patterns for Gateway Proxies',
+    category: 'RUNBOOK_GUIDE',
+    tags: ['K8s', 'ConfigMap', 'Zero-Downtime', 'Envoy'],
+    snippet: 'How to trigger hot-reloads of Envoy and Node.js gateway connection poolers without dropping in-flight HTTP connections.',
+    fullContent: `## Zero-Downtime Reload SOP
+To patch connection bounds without dropping in-flight sessions:
+1. Apply ConfigMap merge with kubectl patch.
+2. Verify updated values in /etc/config/app.json.
+3. Execute graceful rolling restart with maxSurge=25% and maxUnavailable=0.
+4. Verify HTTP 200 return code on synthetic canary endpoints.`,
+    author: 'Sarah Chen (Staff Infra)',
+    updatedAt: '2026-08-04',
+    relatedIncidents: ['INC-8942'],
+    documentType: 'RUNBOOK'
+  },
+  {
+    id: 'kb-309',
+    title: 'PostgreSQL Read-Replica WAL Lock Starvation Remediation',
+    category: 'REPLICATION',
+    tags: ['PostgreSQL', 'WAL', 'Replication Lag', 'Locks'],
+    snippet: 'Resolving standby streaming delay conflicts caused by long-running analytical queries blocking recovery replay.',
+    fullContent: `## Background
+Long-running queries on standby read-replicas hold AccessShareLock on tables that have pending DDL or VACUUM modifications waiting to be replayed by the WAL receiver.
+
+### Resolution Steps
+1. Identify the blocking process PID using pg_stat_activity.
+2. Cancel backend gently using \`SELECT pg_cancel_backend(pid)\`.
+3. If unyielding within 15 seconds, terminate via \`SELECT pg_terminate_backend(pid)\`.
+4. Configure \`statement_timeout = '60s'\` for all analytical read-only roles.`,
+    author: 'Priya Sharma (Lead Data SRE)',
+    updatedAt: '2026-07-20',
+    relatedIncidents: ['INC-8931', 'INC-5219'],
+    documentType: 'INCIDENT_SOP'
+  },
+  {
+    id: 'kb-412',
+    title: 'Kafka Consumer Rebalance Storm Isolation & Poison Pill Offset Bypass',
+    category: 'INCIDENT_SOP',
+    tags: ['Kafka', 'Rebalance', 'Poison Pill', 'DLQ'],
+    snippet: 'Standard operating procedure for dumping poisoned unparseable Kafka offsets to S3 and committing offset + 1 to unblock consumer groups.',
+    fullContent: `## Protocol for Deserialization Poison Pills
+When an unparseable or corrupted payload stalls worker consumer loops:
+1. Dump raw payload from target topic and partition offset to S3 dead-letter bucket for forensics.
+2. Seek consumer group partition offset to current_offset + 1.
+3. Verify heartbeat recovery in ConsumerGroupDescribe API.`,
+    author: 'Carlos Mendez (Senior Payments SRE)',
+    updatedAt: '2026-10-02',
+    relatedIncidents: ['INC-8939', 'INC-6401'],
+    documentType: 'RUNBOOK'
+  }
+];
+
+export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
+  {
+    id: 'aud-1',
+    timestamp: '10:32:15 UTC',
+    actor: 'Elena Rostova',
+    role: 'ADMIN',
+    action: 'RUNBOOK_EXECUTE_STEP',
+    target: 'RB-AUTH-FAILOVER-09 / Step 1',
+    details: 'Verified Redis Cluster Primary Memory Headroom (79.9% available). Output code: 0.',
+    severity: 'MUTATION'
+  },
+  {
+    id: 'aud-2',
+    timestamp: '10:33:02 UTC',
+    actor: 'Elena Rostova',
+    role: 'ADMIN',
+    action: 'RUNBOOK_EXECUTE_STEP',
+    target: 'RB-AUTH-FAILOVER-09 / Step 2',
+    details: 'Patched K8s ConfigMap auth-gateway-config: REDIS_MAX_POOL=2000, REDIS_CONN_TIMEOUT_MS=1500.',
+    severity: 'MUTATION'
+  },
+  {
+    id: 'aud-3',
+    timestamp: '10:28:40 UTC',
+    actor: 'CaseMind Autonomous Engine',
+    role: 'ADMIN',
+    action: 'AI_SYNTHESIS_GENERATED',
+    target: 'INC-8942',
+    details: 'Correlated commit #a98f12b with Redis connection exhaustion. Confidence: 94.6%.',
+    severity: 'INFO'
+  },
+  {
+    id: 'aud-4',
+    timestamp: '10:24:10 UTC',
+    actor: 'CI/CD GitHub Actions',
+    role: 'AGENT',
+    action: 'DEPLOYMENT_ROLLED_OUT',
+    target: 'auth-gateway-v2',
+    details: 'Image sha256:4a8c9e rolled out to 18 replicas in cluster us-east-prod-k8s.',
+    severity: 'INFO'
+  },
+  {
+    id: 'aud-5',
+    timestamp: '10:18:22 UTC',
+    actor: 'Carlos Mendez',
+    role: 'MANAGER',
+    action: 'RUNBOOK_DRY_RUN',
+    target: 'RB-KAFKA-DLQ-SKIP',
+    details: 'Executed dry-run on Kafka partition 12 offset bypass. Simulation status: SUCCESS.',
+    severity: 'INFO'
+  }
+];
+
+export const INITIAL_COPILOT_MESSAGES: CopilotMessage[] = [
+  {
+    id: 'msg-1',
+    sender: 'assistant',
+    text: 'Hello, I am CaseMind Copilot. I have analyzed active incident **INC-8942** and correlated live telemetry with enterprise memory. How can I assist with your investigation or runbook execution?',
+    timestamp: '10:30 UTC',
+    citations: [
+      { title: 'Incident INC-8942 Diagnosis', source: 'CaseMind Engine', confidence: 94.6 },
+      { title: 'Historical Match INC-7102', source: 'Organizational Memory', confidence: 96.4 }
+    ]
+  }
+];
 
 export const INITIAL_INCIDENTS: Incident[] = [
   {
@@ -655,10 +904,10 @@ export const INITIAL_INCIDENTS: Incident[] = [
     slaRemainingMinutes: 0,
     openedAt: '5h ago',
     assignee: {
-      name: 'Sarah Chen',
-      avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
-      role: 'Staff Infrastructure Architect',
-      email: 's.chen@enterprise.corp'
+      name: 'Elena Rostova',
+      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+      role: 'Staff Incident Commander',
+      email: 'e.rostova@enterprise.corp'
     },
     cognitiveSynthesis: {
       summary: 'ACME certificate renewal lock hung on distributed worker. CaseMind triggered automated runbook RB-CERT-RELOAD, renewing cert and updating edge caches in 48 seconds with 0 downtime.',

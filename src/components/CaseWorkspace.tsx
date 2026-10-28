@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { 
   Incident, 
   GroundedCitation, 
-  MemoryMatch,
-  RunbookStep
+  RunbookStep,
+  UserProfile,
+  AuditLogEntry
 } from '../types';
+import { TEAM_USERS } from '../data/mockIncidents';
 import { 
-  BrainCircuit, 
   GitBranch, 
   FileText, 
   AlertOctagon, 
@@ -14,53 +15,75 @@ import {
   Clock, 
   Activity, 
   Sparkles, 
-  Layers, 
   Database, 
-  ShieldCheck, 
   Terminal, 
-  ChevronRight, 
-  ExternalLink, 
   Play, 
-  RotateCcw, 
   AlertTriangle, 
-  Check, 
-  Share2, 
   Download, 
   MessageSquare, 
   Send,
-  Zap,
-  Maximize2
+  Maximize2,
+  ThumbsUp,
+  ThumbsDown,
+  UserCheck
 } from 'lucide-react';
 
 interface CaseWorkspaceProps {
   incident: Incident;
+  currentUser: UserProfile;
   onBackToTriage: () => void;
   onInspectCitation: (citation: GroundedCitation) => void;
   onOpenPostMortemModal: () => void;
   onUpdateIncident: (updated: Incident) => void;
+  onAddAuditLog: (entry: AuditLogEntry) => void;
 }
 
 export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   incident,
+  currentUser,
   onBackToTriage,
   onInspectCitation,
   onOpenPostMortemModal,
-  onUpdateIncident
+  onUpdateIncident,
+  onAddAuditLog
 }) => {
   const [activeTab, setActiveTab] = useState<'synthesis' | 'evidence' | 'telemetry' | 'runbook' | 'postmortem'>('synthesis');
   const [logFilter, setLogFilter] = useState<string>('ALL');
   const [showAiOnly, setShowAiOnly] = useState<boolean>(false);
   const [newNote, setNewNote] = useState<string>('');
   
+  // Recommendation review status
+  const [approvedRemediations, setApprovedRemediations] = useState<Record<string, 'APPROVED' | 'REJECTED'>>({});
+
   // Runbook interactive execution state
   const [runbookMode, setRunbookMode] = useState<'DRY_RUN' | 'EXECUTE'>('DRY_RUN');
   const [executingStepId, setExecutingStepId] = useState<string | null>(null);
   const [safetyGateModalStep, setSafetyGateModalStep] = useState<RunbookStep | null>(null);
 
+  const isViewer = currentUser.role === 'VIEWER';
+  const isAgent = currentUser.role === 'AGENT';
   const isResolved = incident.status === 'RESOLVED';
+
+  // Handler to approve or reject machine recommendation
+  const handleReviewRecommendation = (remId: string, status: 'APPROVED' | 'REJECTED') => {
+    if (isViewer) return;
+    setApprovedRemediations(prev => ({ ...prev, [remId]: status }));
+    onAddAuditLog({
+      id: `aud-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString() + ' UTC',
+      actor: currentUser.name,
+      role: currentUser.role,
+      action: status === 'APPROVED' ? 'RECOMMENDATION_APPROVED' : 'RECOMMENDATION_REJECTED',
+      target: remId,
+      details: `${currentUser.name} (${currentUser.role}) ${status.toLowerCase()} machine recommendation ${remId} for incident ${incident.id}.`,
+      severity: 'INFO'
+    });
+  };
 
   // Handler to run a runbook step
   const handleExecuteStep = (step: RunbookStep) => {
+    if (isViewer) return;
+
     if (step.safetyGate && runbookMode === 'EXECUTE') {
       setSafetyGateModalStep(step);
       return;
@@ -81,7 +104,18 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
       runbook: { ...incident.runbook, steps: updatedSteps }
     });
 
-    // Simulate realistic execution timing
+    // Log start of execution
+    onAddAuditLog({
+      id: `aud-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString() + ' UTC',
+      actor: currentUser.name,
+      role: currentUser.role,
+      action: runbookMode === 'EXECUTE' ? 'RUNBOOK_EXECUTE_STEP' : 'RUNBOOK_DRY_RUN_STEP',
+      target: `${incident.runbook.id} / Step ${stepId}`,
+      details: `Initiated execution in mode ${runbookMode} on target cluster ${incident.cluster}.`,
+      severity: runbookMode === 'EXECUTE' ? 'MUTATION' : 'INFO'
+    });
+
     setTimeout(() => {
       const simulatedOutput = [
         `[${new Date().toISOString()}] Initiated execution on cluster ${incident.cluster}`,
@@ -95,13 +129,12 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           ? { 
               ...s, 
               status: 'COMPLETED' as const, 
-              durationMs: 840,
+              durationMs: 780,
               outputLog: s.outputLog?.length ? [...s.outputLog, ...simulatedOutput] : simulatedOutput 
             } 
           : s
       );
 
-      // Check if all steps are completed
       const allDone = completedSteps.every(s => s.status === 'COMPLETED');
       
       onUpdateIncident({
@@ -110,19 +143,58 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
         runbook: { ...incident.runbook, steps: completedSteps }
       });
       setExecutingStepId(null);
-    }, 1800);
+
+      onAddAuditLog({
+        id: `aud-${Date.now() + 1}`,
+        timestamp: new Date().toLocaleTimeString() + ' UTC',
+        actor: currentUser.name,
+        role: currentUser.role,
+        action: 'RUNBOOK_STEP_COMPLETED',
+        target: `${incident.runbook.id} / Step ${stepId}`,
+        details: `Step completed successfully with 0 exit errors. Cluster health nominal.`,
+        severity: 'INFO'
+      });
+    }, 1500);
+  };
+
+  // Reassign incident
+  const handleReassign = (newAssigneeId: string) => {
+    if (isViewer) return;
+    const foundUser = TEAM_USERS.find(u => u.id === newAssigneeId);
+    if (!foundUser) return;
+
+    onUpdateIncident({
+      ...incident,
+      assignee: {
+        name: foundUser.name,
+        avatar: foundUser.avatar,
+        role: foundUser.team,
+        email: foundUser.email
+      }
+    });
+
+    onAddAuditLog({
+      id: `aud-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString() + ' UTC',
+      actor: currentUser.name,
+      role: currentUser.role,
+      action: 'INCIDENT_REASSIGNED',
+      target: incident.id,
+      details: `Reassigned incident commander to ${foundUser.name} (${foundUser.role}).`,
+      severity: 'INFO'
+    });
   };
 
   // Handler to add a human operator note
   const handleAddNote = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newNote.trim()) return;
+    if (isViewer || !newNote.trim()) return;
 
     const newNoteObj = {
       id: `note-${Date.now()}`,
-      author: 'Elena Rostova',
-      role: 'Staff Incident Commander',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+      author: currentUser.name,
+      role: currentUser.role,
+      avatar: currentUser.avatar,
       time: 'Just now',
       text: newNote.trim()
     };
@@ -131,6 +203,18 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
       ...incident,
       humanNotes: [...incident.humanNotes, newNoteObj]
     });
+
+    onAddAuditLog({
+      id: `aud-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString() + ' UTC',
+      actor: currentUser.name,
+      role: currentUser.role,
+      action: 'NOTE_LOGGED',
+      target: incident.id,
+      details: `Added note: "${newNote.trim().slice(0, 60)}..."`,
+      severity: 'INFO'
+    });
+
     setNewNote('');
   };
 
@@ -153,14 +237,16 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           </div>
 
           <div className="flex items-center space-x-3">
-            {/* Quick status change */}
+            {/* Status Selector */}
             <div className="flex items-center space-x-2">
               <span className="text-xs text-[#464555] font-semibold">Status:</span>
               <select
+                disabled={isViewer}
                 value={incident.status}
                 onChange={(e) => onUpdateIncident({ ...incident, status: e.target.value as any })}
-                className="text-xs font-mono font-semibold bg-[#f2f3ff] border border-[#c7c4d8] rounded-md px-2.5 py-1 text-[#131b2e] focus:outline-hidden focus:ring-1 focus:ring-[#3525cd]"
+                className="text-xs font-mono font-semibold bg-[#f2f3ff] border border-[#c7c4d8] rounded-md px-2.5 py-1 text-[#131b2e] disabled:opacity-60 focus:ring-1 focus:ring-[#3525cd]"
               >
+                <option value="TRIAGING">TRIAGING</option>
                 <option value="INVESTIGATING">INVESTIGATING</option>
                 <option value="MITIGATING">MITIGATING</option>
                 <option value="MONITORING">MONITORING</option>
@@ -177,6 +263,16 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Viewer warning */}
+        {isViewer && (
+          <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>Viewing in Read-Only Mode (Role: VIEWER). Incident mutations and runbook executions are disabled.</span>
+            </div>
+          </div>
+        )}
 
         {/* Case Title & High-Level Metadata */}
         <div className="mt-3 pt-3 border-t border-[#eaedff] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -198,15 +294,23 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               <span>Cluster: <strong className="text-[#131b2e]">{incident.cluster}</strong></span>
               <span>Service: <strong className="text-[#3525cd]">{incident.service}</strong></span>
               <span>Opened: <strong className="text-[#131b2e]">{incident.openedAt}</strong></span>
-              <span className="flex items-center">
-                Commander: 
-                <img 
-                  src={incident.assignee.avatar} 
-                  alt={incident.assignee.name} 
-                  className="w-4 h-4 rounded-full ml-1.5 mr-1" 
-                />
-                <strong className="text-[#131b2e]">{incident.assignee.name}</strong>
-              </span>
+              
+              {/* Reassign dropdown */}
+              <div className="flex items-center space-x-1">
+                <span>Commander:</span>
+                <select
+                  disabled={isViewer}
+                  value={TEAM_USERS.find(u => u.name === incident.assignee.name)?.id || ''}
+                  onChange={(e) => handleReassign(e.target.value)}
+                  className="text-xs font-sans font-semibold bg-[#f2f3ff] border border-[#dae2fd] rounded px-1.5 py-0.5 text-[#131b2e]"
+                >
+                  {TEAM_USERS.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -314,15 +418,14 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
             }`}
           >
             <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
-            <span>Notes & Blameless Review ({incident.humanNotes.length})</span>
+            <span>Notes & Review ({incident.humanNotes.length})</span>
           </button>
         </div>
       </div>
 
-      {/* TAB CONTENT 1: COGNITIVE SYNTHESIS & RCA (Synthesis Violet) */}
+      {/* TAB CONTENT 1: COGNITIVE SYNTHESIS & RCA */}
       {activeTab === 'synthesis' && (
         <div className="space-y-6">
-          {/* Main Autonomous RCA Banner */}
           <div className="bg-white rounded-xl border border-[#dae2fd] shadow-xs overflow-hidden">
             <div className="bg-linear-to-r from-[#7c3aed] to-[#4f46e5] p-4 text-white">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -421,7 +524,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     Incident Causality & Propagation Chain
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                    {incident.cognitiveSynthesis.causalityFlow.map((flow, index) => (
+                    {incident.cognitiveSynthesis.causalityFlow.map((flow) => (
                       <div 
                         key={flow.step}
                         className="bg-[#faf8ff] p-3.5 rounded-lg border border-[#dae2fd] relative hover:border-[#7c3aed] transition-colors"
@@ -495,49 +598,88 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                 </div>
               )}
 
-              {/* Machine-Suggested Remediation Actions */}
+              {/* Machine-Suggested Remediation Actions with Approve/Reject Workflow */}
               <div>
                 <h3 className="text-xs font-bold text-[#464555] uppercase tracking-wider font-mono mb-3">
-                  Autonomous Remediation Vectors
+                  Autonomous Remediation Vectors & Recommendations
                 </h3>
                 <div className="space-y-3">
-                  {incident.cognitiveSynthesis.machineSuggestedRemediations.map((rem) => (
-                    <div
-                      key={rem.id}
-                      className="p-4 rounded-lg bg-linear-to-r from-[#faf8ff] to-[#f2f3ff] border border-[#c3c0ff] flex flex-col md:flex-row md:items-center justify-between gap-4"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-                            rem.risk === 'LOW'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {rem.risk} RISK
-                          </span>
-                          <span className="text-xs font-mono text-[#059669] font-bold">
-                            {rem.confidence}% Confidence
-                          </span>
-                          <span className="text-xs font-mono text-[#464555]">
-                            Recovery ETA: <strong>{rem.expectedRecoveryTime}</strong>
-                          </span>
-                        </div>
-                        <h4 className="text-sm font-bold text-[#131b2e]">
-                          {rem.title}
-                        </h4>
-                      </div>
+                  {incident.cognitiveSynthesis.machineSuggestedRemediations.map((rem) => {
+                    const reviewStatus = approvedRemediations[rem.id];
+                    return (
+                      <div
+                        key={rem.id}
+                        className="p-4 rounded-lg bg-linear-to-r from-[#faf8ff] to-[#f2f3ff] border border-[#c3c0ff] flex flex-col md:flex-row md:items-center justify-between gap-4"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                              rem.risk === 'LOW'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {rem.risk} RISK
+                            </span>
+                            <span className="text-xs font-mono text-[#059669] font-bold">
+                              {rem.confidence}% Confidence
+                            </span>
+                            <span className="text-xs font-mono text-[#464555]">
+                              Recovery ETA: <strong>{rem.expectedRecoveryTime}</strong>
+                            </span>
 
-                      <div className="shrink-0 flex items-center space-x-2">
-                        <button
-                          onClick={() => setActiveTab('runbook')}
-                          className="flex items-center px-4 py-2 bg-[#3525cd] hover:bg-[#4f46e5] text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
-                        >
-                          <Play className="w-3.5 h-3.5 mr-1.5 fill-current" />
-                          <span>Open Runbook Studio</span>
-                        </button>
+                            {reviewStatus && (
+                              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                                reviewStatus === 'APPROVED' ? 'bg-emerald-100 text-emerald-900' : 'bg-red-100 text-red-900'
+                              }`}>
+                                {reviewStatus} BY OPERATOR
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-sm font-bold text-[#131b2e]">
+                            {rem.title}
+                          </h4>
+                        </div>
+
+                        <div className="shrink-0 flex items-center space-x-2">
+                          {/* Approve / Reject buttons */}
+                          {!isViewer && (
+                            <div className="flex items-center space-x-1 border-r border-[#dae2fd] pr-2">
+                              <button
+                                onClick={() => handleReviewRecommendation(rem.id, 'APPROVED')}
+                                className={`p-1.5 rounded-md text-xs font-semibold transition-colors ${
+                                  reviewStatus === 'APPROVED'
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-[#eaedff] text-[#059669] hover:bg-emerald-100'
+                                }`}
+                                title="Approve this machine recommendation"
+                              >
+                                <ThumbsUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleReviewRecommendation(rem.id, 'REJECTED')}
+                                className={`p-1.5 rounded-md text-xs font-semibold transition-colors ${
+                                  reviewStatus === 'REJECTED'
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-[#eaedff] text-[#ba1a1a] hover:bg-red-100'
+                                }`}
+                                title="Reject this recommendation"
+                              >
+                                <ThumbsDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => setActiveTab('runbook')}
+                            className="flex items-center px-3.5 py-1.5 bg-[#3525cd] hover:bg-[#4f46e5] text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
+                          >
+                            <Play className="w-3.5 h-3.5 mr-1.5 fill-current" />
+                            <span>Open Runbook Studio</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -545,10 +687,9 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
         </div>
       )}
 
-      {/* TAB CONTENT 2: EVIDENCE & PROVENANCE EXPLORER (Evidence Cyan) */}
+      {/* TAB CONTENT 2: EVIDENCE & PROVENANCE EXPLORER */}
       {activeTab === 'evidence' && (
         <div className="space-y-6">
-          {/* Top Lineage Info Banner */}
           <div className="bg-[#f0fdfa] rounded-xl border border-[#76dcff] p-4 text-[#006077]">
             <div className="flex items-center space-x-2">
               <GitBranch className="w-5 h-5 text-[#0891b2]" />
@@ -650,7 +791,6 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       {cit.title}
                     </h4>
 
-                    {/* Code snippet preview */}
                     <pre className="p-2.5 rounded-md bg-[#131b2e] text-[#eaedff] text-xs font-mono overflow-x-auto leading-relaxed">
                       {cit.snippet}
                     </pre>
@@ -675,7 +815,6 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
       {/* TAB CONTENT 3: TELEMETRY & SPANS */}
       {activeTab === 'telemetry' && (
         <div className="space-y-6">
-          {/* Metrics Line Chart Simulation */}
           <div className="bg-white rounded-xl border border-[#dae2fd] p-5 shadow-xs">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div>
@@ -683,7 +822,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                   Telemetry Correlation (Incident Window)
                 </h3>
                 <p className="text-xs text-[#777587]">
-                  P99 Latency vs Error Rate % across auth-gateway-v2 ingress fleet
+                  P99 Latency vs Error Rate % across {incident.service} fleet
                 </p>
               </div>
 
@@ -699,18 +838,15 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               </div>
             </div>
 
-            {/* Metric Chart Visualization */}
             <div className="h-44 w-full flex items-end space-x-2 pt-6 pb-2 border-b border-[#dae2fd]">
-              {incident.metricsTimeline.map((pt, i) => {
+              {incident.metricsTimeline.map((pt) => {
                 const heightPct = Math.min(100, Math.max(10, (pt.latencyP99 / 5200) * 100));
                 return (
                   <div key={pt.time} className="flex-1 flex flex-col items-center h-full justify-end group relative">
-                    {/* Tooltip */}
                     <div className="absolute -top-12 bg-[#131b2e] text-white text-[10px] font-mono p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 shadow-lg">
                       {pt.time}: P99={pt.latencyP99}ms | Err={pt.errorRate}%
                     </div>
 
-                    {/* Bar */}
                     <div 
                       className="w-full rounded-t transition-all group-hover:brightness-110"
                       style={{ 
@@ -725,8 +861,8 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
             </div>
 
             <div className="mt-3 flex items-center justify-between text-xs font-mono text-[#464555]">
-              <span>T-0 Deploy: 10:24 UTC (v4.12.8)</span>
-              <span>Peak Anomaly: 10:30 UTC (5,100ms P99)</span>
+              <span>T-0 Ingested: {incident.openedAt}</span>
+              <span>Cluster: {incident.cluster}</span>
             </div>
           </div>
 
@@ -762,7 +898,6 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               </div>
             </div>
 
-            {/* Event list */}
             <div className="space-y-2">
               {incident.telemetryStream
                 .filter(ev => logFilter === 'ALL' || ev.level === logFilter)
@@ -818,7 +953,6 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
       {/* TAB CONTENT 4: RUNBOOK STUDIO */}
       {activeTab === 'runbook' && (
         <div className="space-y-6">
-          {/* Runbook Header */}
           <div className="bg-white rounded-xl border border-[#dae2fd] p-5 shadow-xs">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -841,6 +975,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               {/* Mode switch */}
               <div className="flex items-center space-x-2 bg-[#f2f3ff] p-1.5 rounded-lg border border-[#c7c4d8]">
                 <button
+                  disabled={isViewer}
                   onClick={() => setRunbookMode('DRY_RUN')}
                   className={`px-3 py-1 text-xs font-mono font-semibold rounded-md transition-all ${
                     runbookMode === 'DRY_RUN'
@@ -851,6 +986,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                   Dry-Run Simulation
                 </button>
                 <button
+                  disabled={isViewer}
                   onClick={() => setRunbookMode('EXECUTE')}
                   className={`px-3 py-1 text-xs font-mono font-semibold rounded-md transition-all ${
                     runbookMode === 'EXECUTE'
@@ -913,12 +1049,10 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                         {step.description}
                       </p>
 
-                      {/* Command box */}
                       <pre className="p-3 rounded-lg bg-[#131b2e] text-[#eaedff] text-xs font-mono overflow-x-auto">
                         <code>{step.command}</code>
                       </pre>
 
-                      {/* Execution Terminal Output Log */}
                       {step.outputLog && step.outputLog.length > 0 && (
                         <div className="mt-2 p-3 rounded-lg bg-[#0f172a] border border-[#283044] text-[11px] font-mono text-emerald-400 space-y-1">
                           {step.outputLog.map((line, idx) => (
@@ -930,7 +1064,6 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       )}
                     </div>
 
-                    {/* Step Action Button */}
                     <div className="shrink-0 flex items-center space-x-2">
                       {isCompleted ? (
                         <span className="flex items-center text-xs font-mono font-bold text-[#059669] bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
@@ -939,10 +1072,12 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                         </span>
                       ) : (
                         <button
-                          disabled={isStepRunning}
+                          disabled={isStepRunning || isViewer}
                           onClick={() => handleExecuteStep(step)}
                           className={`flex items-center px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                            isStepRunning
+                            isViewer
+                              ? 'bg-[#c7c4d8] text-[#777587] cursor-not-allowed'
+                              : isStepRunning
                               ? 'bg-[#c7c4d8] text-[#464555] cursor-not-allowed'
                               : runbookMode === 'EXECUTE'
                               ? 'bg-[#ba1a1a] hover:bg-red-700 text-white shadow-xs'
@@ -951,10 +1086,12 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                         >
                           <Play className="w-3.5 h-3.5 mr-1.5 fill-current" />
                           <span>
-                            {isStepRunning 
+                            {isViewer
+                              ? 'Read-Only (Viewer)'
+                              : isStepRunning 
                               ? 'Executing...' 
                               : runbookMode === 'EXECUTE' 
-                              ? 'Execute Step in Prod' 
+                              ? 'Execute in Prod' 
                               : 'Simulate Step'}
                           </span>
                         </button>
@@ -971,7 +1108,6 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
       {/* TAB CONTENT 5: POST-MORTEM & HUMAN NOTES */}
       {activeTab === 'postmortem' && (
         <div className="space-y-6">
-          {/* Post Mortem Document Card */}
           {incident.postMortemDraft && (
             <div className="bg-white rounded-xl border border-[#dae2fd] p-6 shadow-xs space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#eaedff]">
@@ -1035,7 +1171,6 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               Human-in-the-Loop Operator Journal
             </h3>
 
-            {/* Existing notes */}
             <div className="space-y-3">
               {incident.humanNotes.map((note) => (
                 <div key={note.id} className="p-3.5 rounded-lg bg-[#faf8ff] border border-[#eaedff] flex items-start space-x-3">
@@ -1046,7 +1181,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                   />
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between text-xs font-mono">
-                      <span className="font-bold text-[#131b2e]">{note.author}</span>
+                      <span className="font-bold text-[#131b2e]">{note.author} ({note.role})</span>
                       <span className="text-[#777587]">{note.time}</span>
                     </div>
                     <p className="text-xs text-[#464555] font-sans leading-relaxed">
@@ -1061,14 +1196,16 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
             <form onSubmit={handleAddNote} className="pt-2 flex items-center space-x-2">
               <input
                 type="text"
-                placeholder="Log an observation, runbook verification, or override..."
+                disabled={isViewer}
+                placeholder={isViewer ? 'Read-only mode (viewers cannot log notes)' : 'Log an observation, runbook verification, or override...'}
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}
-                className="flex-1 px-3 py-2 bg-[#f2f3ff] border border-[#c7c4d8] rounded-lg text-xs text-[#131b2e] placeholder-[#777587] focus:outline-hidden focus:ring-2 focus:ring-[#3525cd]"
+                className="flex-1 px-3 py-2 bg-[#f2f3ff] border border-[#c7c4d8] rounded-lg text-xs text-[#131b2e] placeholder-[#777587] disabled:opacity-50 focus:ring-2 focus:ring-[#3525cd]"
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-[#3525cd] text-white font-semibold text-xs rounded-lg hover:bg-[#4f46e5] flex items-center space-x-1.5 transition-colors shrink-0"
+                disabled={isViewer || !newNote.trim()}
+                className="px-4 py-2 bg-[#3525cd] text-white font-semibold text-xs rounded-lg hover:bg-[#4f46e5] disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1.5 transition-colors shrink-0"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Log Note</span>
@@ -1080,7 +1217,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
 
       {/* Safety Gate Confirmation Modal */}
       {safetyGateModalStep && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-red-200 space-y-4">
             <div className="flex items-center space-x-3 text-[#ba1a1a]">
               <AlertTriangle className="w-6 h-6" />

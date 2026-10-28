@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { 
   Incident, 
   Severity, 
-  IncidentStatus 
+  IncidentStatus,
+  UserProfile
 } from '../types';
 import { 
   AlertTriangle, 
@@ -16,44 +17,71 @@ import {
   Zap, 
   GitBranch, 
   Layers, 
-  Activity,
   DollarSign,
-  Play
+  Play,
+  ArrowUpDown,
+  PlusCircle
 } from 'lucide-react';
 
 interface TriageCommandBoardProps {
   incidents: Incident[];
   onSelectIncident: (id: string) => void;
   onOpenSimulate: () => void;
+  onOpenCreateTicket: () => void;
   onQuickRunbook: (incident: Incident) => void;
+  currentUser: UserProfile;
 }
 
 export const TriageCommandBoard: React.FC<TriageCommandBoardProps> = ({
   incidents,
   onSelectIncident,
   onOpenSimulate,
-  onQuickRunbook
+  onOpenCreateTicket,
+  onQuickRunbook,
+  currentUser
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [sortBy, setSortBy] = useState<'SLA' | 'SEVERITY' | 'CONFIDENCE' | 'USERS'>('SLA');
 
-  // Filtered incidents
-  const filteredIncidents = incidents.filter(inc => {
-    const matchesSearch = 
-      inc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inc.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inc.service.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inc.cluster.toLowerCase().includes(searchQuery.toLowerCase());
+  const isViewer = currentUser.role === 'VIEWER';
 
-    const matchesSeverity = 
-      selectedSeverity === 'ALL' || inc.severity.startsWith(selectedSeverity);
+  // Filtered and sorted incidents
+  const filteredIncidents = incidents
+    .filter(inc => {
+      const matchesSearch = 
+        inc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        inc.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        inc.service.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        inc.cluster.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesStatus = 
-      selectedStatus === 'ALL' || inc.status === selectedStatus;
+      const matchesSeverity = 
+        selectedSeverity === 'ALL' || inc.severity.startsWith(selectedSeverity);
 
-    return matchesSearch && matchesSeverity && matchesStatus;
-  });
+      const matchesStatus = 
+        selectedStatus === 'ALL' || inc.status === selectedStatus;
+
+      return matchesSearch && matchesSeverity && matchesStatus;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'SLA') {
+        return (a.slaRemainingMinutes || 999) - (b.slaRemainingMinutes || 999);
+      }
+      if (sortBy === 'SEVERITY') {
+        const order: Record<string, number> = { 'P0': 0, 'P1': 1, 'P2': 2, 'P3': 3 };
+        const aSev = order[a.severity.slice(0, 2)] ?? 9;
+        const bSev = order[b.severity.slice(0, 2)] ?? 9;
+        return aSev - bSev;
+      }
+      if (sortBy === 'CONFIDENCE') {
+        return b.cognitiveSynthesis.confidenceScore - a.cognitiveSynthesis.confidenceScore;
+      }
+      if (sortBy === 'USERS') {
+        return b.blastRadius.affectedUsers - a.blastRadius.affectedUsers;
+      }
+      return 0;
+    });
 
   const p0Count = incidents.filter(i => i.severity.startsWith('P0') && i.status !== 'RESOLVED').length;
   const p1Count = incidents.filter(i => i.severity.startsWith('P1') && i.status !== 'RESOLVED').length;
@@ -87,7 +115,7 @@ export const TriageCommandBoard: React.FC<TriageCommandBoardProps> = ({
             </div>
           </div>
           <div className="mt-2 text-xs text-[#464555] flex items-center">
-            <span>SLA breach risk:</span>
+            <span>SLA target threshold:</span>
             <span className="ml-1 font-semibold text-[#ba1a1a]">1 case &lt; 20m</span>
           </div>
         </div>
@@ -153,7 +181,7 @@ export const TriageCommandBoard: React.FC<TriageCommandBoardProps> = ({
         </div>
       </div>
 
-      {/* Filter and Command Search Bar */}
+      {/* Filter, Search & Sort Bar */}
       <div className="bg-white p-4 rounded-xl border border-[#dae2fd] shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Search box */}
@@ -164,24 +192,35 @@ export const TriageCommandBoard: React.FC<TriageCommandBoardProps> = ({
               placeholder="Search incidents by ID, service, trace hash, commit, or symptom..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-[#f2f3ff] border border-[#c7c4d8] rounded-lg text-sm text-[#131b2e] placeholder-[#777587] focus:outline-hidden focus:ring-2 focus:ring-[#4f46e5] focus:bg-white transition-all font-sans"
+              className="w-full pl-9 pr-4 py-2 bg-[#f2f3ff] border border-[#c7c4d8] rounded-lg text-xs text-[#131b2e] placeholder-[#777587] focus:ring-2 focus:ring-[#3525cd] focus:bg-white transition-all font-mono"
             />
           </div>
 
-          {/* Quick Simulate Trigger */}
-          <button
-            onClick={onOpenSimulate}
-            className="flex items-center justify-center space-x-2 px-4 py-2 bg-[#f2f3ff] hover:bg-[#eaedff] text-[#3525cd] border border-[#c3c0ff] rounded-lg text-sm font-semibold transition-colors shrink-0"
-          >
-            <Sparkles className="w-4 h-4 text-[#7c3aed]" />
-            <span>Simulate Incident Scenario</span>
-          </button>
+          <div className="flex items-center space-x-2 shrink-0">
+            {/* Create Ticket */}
+            <button
+              onClick={onOpenCreateTicket}
+              className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-[#3525cd] hover:bg-[#4f46e5] text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Create Ticket</span>
+            </button>
+
+            {/* Quick Simulate Trigger */}
+            <button
+              onClick={onOpenSimulate}
+              className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-[#f2f3ff] hover:bg-[#eaedff] text-[#7c3aed] border border-[#c3c0ff] rounded-lg text-xs font-semibold transition-colors"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Simulate Scenario</span>
+            </button>
+          </div>
         </div>
 
-        {/* Filter chips */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#eaedff]">
+        {/* Filter and Sort chips */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#eaedff]">
           {/* Severity selector */}
-          <div className="flex items-center space-x-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-[#464555] font-semibold mr-1 flex items-center">
               <Filter className="w-3 h-3 mr-1" /> Severity:
             </span>
@@ -200,22 +239,21 @@ export const TriageCommandBoard: React.FC<TriageCommandBoardProps> = ({
             ))}
           </div>
 
-          {/* Status selector */}
-          <div className="flex items-center space-x-1.5">
-            <span className="text-xs text-[#464555] font-semibold mr-1">Status:</span>
-            {['ALL', 'INVESTIGATING', 'MITIGATING', 'MONITORING', 'RESOLVED'].map((st) => (
-              <button
-                key={st}
-                onClick={() => setSelectedStatus(st)}
-                className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
-                  selectedStatus === st
-                    ? 'bg-[#131b2e] text-white shadow-xs'
-                    : 'bg-[#f2f3ff] text-[#464555] hover:bg-[#eaedff]'
-                }`}
-              >
-                {st}
-              </button>
-            ))}
+          {/* Sort Selector */}
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-[#464555] font-semibold flex items-center">
+              <ArrowUpDown className="w-3 h-3 mr-1" /> Sort:
+            </span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="text-xs font-mono font-semibold bg-[#f2f3ff] border border-[#c7c4d8] rounded-md px-2 py-1 text-[#131b2e] focus:ring-1 focus:ring-[#3525cd]"
+            >
+              <option value="SLA">SLA Remaining (Urgent first)</option>
+              <option value="SEVERITY">Severity (P0 -&gt; P3)</option>
+              <option value="CONFIDENCE">Cognitive Confidence %</option>
+              <option value="USERS">Impacted Users</option>
+            </select>
           </div>
         </div>
       </div>
@@ -252,7 +290,7 @@ export const TriageCommandBoard: React.FC<TriageCommandBoardProps> = ({
                     : isP1 && !isResolved
                     ? 'border-l-4 border-l-amber-500 border-amber-200'
                     : isResolved
-                    ? 'border-l-4 border-l-[#059669] border-[#dae2fd] opacity-80 hover:opacity-100'
+                    ? 'border-l-4 border-l-[#059669] border-[#dae2fd] opacity-85 hover:opacity-100'
                     : 'border-l-4 border-l-[#4f46e5] border-[#dae2fd]'
                 }`}
               >
@@ -260,7 +298,6 @@ export const TriageCommandBoard: React.FC<TriageCommandBoardProps> = ({
                   {/* Top line: ID, Severity, Status, Service, SLA */}
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center space-x-2.5">
-                      {/* Pulsing indicator for active P0/P1 */}
                       {!isResolved && (isP0 || isP1) && (
                         <span className="relative flex h-3 w-3">
                           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
@@ -321,7 +358,7 @@ export const TriageCommandBoard: React.FC<TriageCommandBoardProps> = ({
                           <span>Resolved</span>
                         </div>
                       )}
-                      <span className="text-[#777587]">{incident.openedAt}</span>
+                      <span className="text-[#777587] font-mono">{incident.openedAt}</span>
                     </div>
                   </div>
 
@@ -387,8 +424,10 @@ export const TriageCommandBoard: React.FC<TriageCommandBoardProps> = ({
                     <div className="flex items-center space-x-2">
                       {incident.runbook.steps.length > 0 && !isResolved && (
                         <button
+                          disabled={isViewer}
                           onClick={() => onQuickRunbook(incident)}
-                          className="flex items-center px-3 py-1.5 text-xs font-semibold rounded-md bg-[#eaedff] text-[#3525cd] hover:bg-[#dad7ff] border border-[#c3c0ff] transition-colors"
+                          className="flex items-center px-3 py-1.5 text-xs font-semibold rounded-md bg-[#eaedff] text-[#3525cd] hover:bg-[#dad7ff] border border-[#c3c0ff] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={isViewer ? 'Viewer role is read-only' : 'Open Runbook Studio'}
                         >
                           <Play className="w-3 h-3 mr-1 text-[#3525cd] fill-current" />
                           <span>Runbook ({incident.runbook.id})</span>

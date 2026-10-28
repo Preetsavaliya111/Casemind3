@@ -2,6 +2,18 @@ export type Severity = 'P0 - CRITICAL' | 'P1 - HIGH' | 'P2 - MEDIUM' | 'P3 - LOW
 
 export type IncidentStatus = 'TRIAGING' | 'INVESTIGATING' | 'MITIGATING' | 'MONITORING' | 'RESOLVED';
 
+export type UserRole = 'ADMIN' | 'MANAGER' | 'AGENT' | 'VIEWER';
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  avatar: string;
+  role: UserRole;
+  email: string;
+  team: string;
+  activeSince: string;
+}
+
 export interface Assignee {
   name: string;
   avatar: string;
@@ -171,4 +183,47 @@ export interface GraphEdge {
   to: string;
   label: string;
   highlighted?: boolean;
+}
+
+export interface KnowledgeArticle {
+  id: string;
+  title: string;
+  category: 'ARCHITECTURAL' | 'RUNBOOK_GUIDE' | 'POST_MORTEM' | 'REPLICATION' | 'INCIDENT_SOP';
+  tags: string[];
+  snippet: string;
+  fullContent: string;
+  author: string;
+  updatedAt: string;
+  relatedIncidents: string[];
+  documentType: 'MARKDOWN' | 'RUNBOOK' | 'LOG_SPEC' | 'INGESTED_PDF' | 'INCIDENT_SOP';
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  actor: string;
+  role: UserRole;
+  action: string;
+  target: string;
+  details: string;
+  severity: 'INFO' | 'SECURITY' | 'MUTATION' | 'OVERRIDE';
+}
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  unread: boolean;
+  type: 'CRITICAL' | 'WARN' | 'INFO' | 'SUCCESS';
+  linkIncidentId?: string;
+}
+
+export interface CopilotMessage {
+  id: string;
+  sender: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+  citations?: Array<{ title: string; source: string; confidence: number }>;
+  isThinking?: boolean;
 }
