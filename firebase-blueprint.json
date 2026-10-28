@@ -1,0 +1,167 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role-based permissions and team affiliation",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique user ID matching Firebase Auth UID",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the user",
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "description": "Access control tier: ADMIN, MANAGER, AGENT, or VIEWER",
+          "enum": ["ADMIN", "MANAGER", "AGENT", "VIEWER"]
+        },
+        "team": {
+          "type": "string",
+          "description": "Operational team (e.g. Core SRE, Platform Ops)",
+          "maxLength": 100
+        },
+        "avatar": {
+          "type": "string",
+          "description": "Avatar URL or initials badge",
+          "maxLength": 500
+        },
+        "activeSince": {
+          "type": "string",
+          "description": "Timestamp or human readable date joined",
+          "maxLength": 50
+        }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Incident": {
+      "title": "Incident",
+      "description": "CaseMind incident ticket with cognitive synthesis and memory linkages",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique incident ID, e.g. INC-7102",
+          "maxLength": 64
+        },
+        "title": {
+          "type": "string",
+          "description": "Incident title and summary",
+          "maxLength": 300
+        },
+        "severity": {
+          "type": "string",
+          "description": "Priority severity level",
+          "enum": ["P0 - CRITICAL", "P1 - HIGH", "P2 - MEDIUM", "P3 - LOW"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Lifecycle state of incident",
+          "enum": ["TRIAGING", "INVESTIGATING", "MITIGATING", "MONITORING", "RESOLVED"]
+        },
+        "service": {
+          "type": "string",
+          "description": "Primary affected service",
+          "maxLength": 100
+        },
+        "cluster": {
+          "type": "string",
+          "description": "Deployment cluster or cloud zone",
+          "maxLength": 100
+        },
+        "slaRemainingMinutes": {
+          "type": "number",
+          "description": "Remaining SLA window in minutes"
+        },
+        "openedAt": {
+          "type": "string",
+          "description": "ISO timestamp when incident was created",
+          "maxLength": 50
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID of creator or reporter",
+          "maxLength": 128
+        }
+      },
+      "required": ["id", "title", "severity", "status", "service"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable security log of operations and overrides",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique log entry ID",
+          "maxLength": 64
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO timestamp",
+          "maxLength": 50
+        },
+        "actor": {
+          "type": "string",
+          "description": "Name or email of operator",
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "description": "User role at execution time",
+          "enum": ["ADMIN", "MANAGER", "AGENT", "VIEWER"]
+        },
+        "action": {
+          "type": "string",
+          "description": "Action performed",
+          "maxLength": 100
+        },
+        "target": {
+          "type": "string",
+          "description": "Target resource ID",
+          "maxLength": 100
+        },
+        "details": {
+          "type": "string",
+          "description": "Audit details",
+          "maxLength": 1000
+        },
+        "severity": {
+          "type": "string",
+          "description": "Log severity",
+          "enum": ["INFO", "SECURITY", "MUTATION", "OVERRIDE"]
+        }
+      },
+      "required": ["id", "timestamp", "actor", "action", "target"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "User profiles and RBAC assignment"
+    },
+    "/incidents/{incidentId}": {
+      "schema": {
+        "$ref": "#/entities/Incident"
+      },
+      "description": "Live and historical operational incidents"
+    },
+    "/auditLogs/{logId}": {
+      "schema": {
+        "$ref": "#/entities/AuditLog"
+      },
+      "description": "Immutable audit log tracking role changes and mitigation executions"
+    }
+  }
+}

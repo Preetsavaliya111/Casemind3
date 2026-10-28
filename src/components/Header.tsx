@@ -7,27 +7,30 @@ import {
   Sparkles, 
   Bell, 
   Radio, 
-  Terminal,
-  Cpu,
-  BookOpen,
-  Lock,
-  PlusCircle,
-  Settings,
-  MessageSquare
+  Terminal, 
+  Cpu, 
+  BookOpen, 
+  Lock, 
+  PlusCircle, 
+  Settings, 
+  Home, 
+  User, 
+  LogIn 
 } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface HeaderProps {
-  currentTab: 'triage' | 'workspace' | 'graph' | 'knowledge' | 'analytics' | 'admin';
-  onSelectTab: (tab: 'triage' | 'workspace' | 'graph' | 'knowledge' | 'analytics' | 'admin') => void;
+  currentTab: 'landing' | 'triage' | 'workspace' | 'graph' | 'knowledge' | 'analytics' | 'admin';
+  onSelectTab: (tab: 'landing' | 'triage' | 'workspace' | 'graph' | 'knowledge' | 'analytics' | 'admin') => void;
   activeIncidentsCount: number;
   unreadNotificationsCount: number;
   onOpenNotifications: () => void;
   onOpenCreateTicket: () => void;
   onOpenCopilot: () => void;
   onOpenSettings: () => void;
+  onOpenAuth: () => void;
   selectedIncidentId: string;
-  currentUser: UserProfile;
+  currentUser: UserProfile | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,6 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCreateTicket,
   onOpenCopilot,
   onOpenSettings,
+  onOpenAuth,
   selectedIncidentId,
   currentUser
 }) => {
@@ -72,13 +76,14 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Main navigation header */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-2">
-          {/* Brand logo & status */}
+          {/* Brand logo — CLICK REDIRECTS TO LANDING PAGE */}
           <div className="flex items-center space-x-3 shrink-0">
             <div 
-              onClick={() => onSelectTab('triage')}
+              onClick={() => onSelectTab('landing')}
               className="flex items-center space-x-2.5 cursor-pointer group"
+              title="Return to CaseMind Landing Page"
             >
-              <div className="w-9 h-9 rounded-lg bg-linear-to-br from-[#3525cd] via-[#4f46e5] to-[#7c3aed] flex items-center justify-center text-white shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
+              <div className="w-9 h-9 rounded-xl bg-linear-to-br from-[#3525cd] via-[#4f46e5] to-[#7c3aed] flex items-center justify-center text-white shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
                 <BrainCircuit className="w-5 h-5" />
               </div>
               <div>
@@ -87,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
                     CaseMind
                   </span>
                   <span className="text-[10px] px-1.5 py-0.2 rounded-sm bg-[#eaedff] text-[#3525cd] font-semibold uppercase tracking-wider font-mono border border-[#c3c0ff]">
-                    AI
+                    Intelligence
                   </span>
                 </div>
               </div>
@@ -96,6 +101,18 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Navigation Tabs */}
           <nav className="hidden lg:flex items-center space-x-1">
+            <button
+              onClick={() => onSelectTab('landing')}
+              className={`flex items-center px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                currentTab === 'landing'
+                  ? 'bg-[#eaedff] text-[#3525cd] border-b-2 border-[#3525cd]'
+                  : 'text-[#464555] hover:text-[#131b2e] hover:bg-[#f2f3ff]'
+              }`}
+            >
+              <Home className="w-3.5 h-3.5 mr-1 text-[#3525cd]" />
+              <span>Overview</span>
+            </button>
+
             <button
               onClick={() => onSelectTab('triage')}
               className={`flex items-center px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
@@ -159,9 +176,18 @@ export const Header: React.FC<HeaderProps> = ({
                   ? 'bg-[#eaedff] text-[#3525cd] border-b-2 border-[#3525cd]'
                   : 'text-[#464555] hover:text-[#131b2e] hover:bg-[#f2f3ff]'
               }`}
+              title={
+                !currentUser ? 'Requires authentication (Manager/Admin)' :
+                currentUser.role !== 'ADMIN' && currentUser.role !== 'MANAGER'
+                  ? 'Restricted to Manager/Admin'
+                  : 'Operations Telemetry & SLA Analytics'
+              }
             >
               <BarChart3 className="w-3.5 h-3.5 mr-1 text-[#006780]" />
               <span>Telemetry</span>
+              {(!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'MANAGER')) && (
+                <Lock className="w-3 h-3 ml-1 text-slate-400" />
+              )}
             </button>
 
             <button
@@ -171,9 +197,20 @@ export const Header: React.FC<HeaderProps> = ({
                   ? 'bg-[#eaedff] text-[#3525cd] border-b-2 border-[#3525cd]'
                   : 'text-[#464555] hover:text-[#131b2e] hover:bg-[#f2f3ff]'
               }`}
+              title={
+                !currentUser ? 'Requires authentication (Admin)' :
+                currentUser.role !== 'ADMIN'
+                  ? 'Restricted to Admin clearance'
+                  : 'Admin Governance & Security Logs'
+              }
             >
               <Lock className="w-3.5 h-3.5 mr-1 text-[#5c00ca]" />
               <span>Admin & Audit</span>
+              {(!currentUser || currentUser.role !== 'ADMIN') && (
+                <span className="ml-1 text-[9px] font-mono px-1 py-0.2 bg-purple-100 text-purple-700 rounded font-bold">
+                  ADMIN
+                </span>
+              )}
             </button>
           </nav>
 
@@ -182,7 +219,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Create ticket */}
             <button
               onClick={onOpenCreateTicket}
-              className="hidden sm:flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold rounded-md bg-[#3525cd] text-white hover:bg-[#4f46e5] shadow-xs transition-colors"
+              className="hidden sm:flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-[#3525cd] text-white hover:bg-[#4f46e5] shadow-xs transition-colors"
               title="Create new incident or support ticket"
             >
               <PlusCircle className="w-3.5 h-3.5" />
@@ -192,7 +229,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* AI Copilot trigger */}
             <button
               onClick={onOpenCopilot}
-              className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold rounded-md bg-linear-to-r from-[#7c3aed] to-[#4f46e5] text-white hover:opacity-95 shadow-xs transition-opacity"
+              className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-linear-to-r from-[#7c3aed] to-[#4f46e5] text-white hover:opacity-95 shadow-xs transition-opacity"
               title="Open CaseMind Investigation Copilot"
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -220,52 +257,64 @@ export const Header: React.FC<HeaderProps> = ({
               <Settings className="w-4 h-4" />
             </button>
 
-            {/* User profile with role badge */}
-            <div 
-              onClick={onOpenSettings}
-              className="flex items-center space-x-1.5 pl-1 cursor-pointer group"
-              title={`Logged in as ${currentUser.name} (${currentUser.role}). Click to switch role.`}
-            >
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-7 h-7 rounded-full border border-[#3525cd] object-cover"
-              />
-              <span className={`hidden xl:inline text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border ${
-                currentUser.role === 'ADMIN'
-                  ? 'bg-purple-100 text-purple-900 border-purple-300'
-                  : currentUser.role === 'MANAGER'
-                  ? 'bg-indigo-100 text-indigo-900 border-indigo-300'
-                  : currentUser.role === 'AGENT'
-                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                  : 'bg-slate-100 text-slate-800 border-slate-300'
-              }`}>
-                {currentUser.role}
-              </span>
-            </div>
+            {/* Auth / Profile Area */}
+            {currentUser ? (
+              <div 
+                onClick={onOpenSettings}
+                className="flex items-center space-x-1.5 pl-1 cursor-pointer group"
+                title={`Authenticated as ${currentUser.name} (${currentUser.role}). Click for settings.`}
+              >
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  className="w-7 h-7 rounded-full border border-[#3525cd] object-cover"
+                />
+                <span className={`hidden xl:inline text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border ${
+                  currentUser.role === 'ADMIN'
+                    ? 'bg-purple-100 text-purple-900 border-purple-300'
+                    : currentUser.role === 'MANAGER'
+                    ? 'bg-indigo-100 text-indigo-900 border-indigo-300'
+                    : currentUser.role === 'AGENT'
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-slate-100 text-slate-800 border-slate-300'
+                }`}>
+                  {currentUser.role}
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={onOpenAuth}
+                className="flex items-center space-x-1 px-3 py-1.5 text-xs font-bold rounded-lg bg-[#3525cd] text-white hover:bg-[#4f46e5] shadow-xs transition-colors"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+            )}
           </div>
         </div>
 
         {/* Mobile secondary navigation strip */}
         <div className="lg:hidden flex items-center space-x-1 py-2 overflow-x-auto border-t border-[#eaedff] text-xs">
           {[
+            { id: 'landing', label: 'Overview' },
             { id: 'triage', label: 'Incidents' },
             { id: 'workspace', label: 'Workspace' },
             { id: 'graph', label: 'Memory Graph' },
             { id: 'knowledge', label: 'Knowledge Base' },
-            { id: 'analytics', label: 'Telemetry' },
-            { id: 'admin', label: 'Admin & Audit' }
+            { id: 'analytics', label: 'Telemetry', roleLocked: !currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'MANAGER') },
+            { id: 'admin', label: 'Admin & Audit', roleLocked: !currentUser || currentUser.role !== 'ADMIN' }
           ].map((item) => (
             <button
               key={item.id}
               onClick={() => onSelectTab(item.id as any)}
-              className={`px-2.5 py-1 rounded whitespace-nowrap font-medium ${
+              className={`px-2.5 py-1 rounded whitespace-nowrap font-medium flex items-center gap-1 ${
                 currentTab === item.id 
                   ? 'bg-[#eaedff] text-[#3525cd] font-bold' 
                   : 'text-[#464555]'
               }`}
             >
-              {item.label}
+              <span>{item.label}</span>
+              {item.roleLocked && <Lock className="w-2.5 h-2.5 text-slate-400" />}
             </button>
           ))}
         </div>

@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny all paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'preetsavaliya077@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'role']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+        data.email is string && data.email.size() > 0 && data.email.size() <= 150 &&
+        data.role in ['ADMIN', 'MANAGER', 'AGENT', 'VIEWER'] &&
+        (!('team' in data) || (data.team is string && data.team.size() <= 100)) &&
+        (!('avatar' in data) || (data.avatar is string && data.avatar.size() <= 500)) &&
+        (!('activeSince' in data) || (data.activeSince is string && data.activeSince.size() <= 50));
+    }
+
+    function isValidIncident(data) {
+      return data.keys().hasAll(['id', 'title', 'severity', 'status', 'service']) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 64 &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 300 &&
+        data.severity in ['P0 - CRITICAL', 'P1 - HIGH', 'P2 - MEDIUM', 'P3 - LOW'] &&
+        data.status in ['TRIAGING', 'INVESTIGATING', 'MITIGATING', 'MONITORING', 'RESOLVED'] &&
+        data.service is string && data.service.size() <= 100 &&
+        (!('cluster' in data) || (data.cluster is string && data.cluster.size() <= 100)) &&
+        (!('slaRemainingMinutes' in data) || (data.slaRemainingMinutes is number)) &&
+        (!('authorId' in data) || (data.authorId is string && data.authorId.size() <= 128));
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['id', 'timestamp', 'actor', 'action', 'target']) &&
+        data.id is string && data.id.size() <= 64 &&
+        data.timestamp is string && data.timestamp.size() <= 50 &&
+        data.actor is string && data.actor.size() <= 150 &&
+        data.action is string && data.action.size() <= 100 &&
+        data.target is string && data.target.size() <= 100 &&
+        (!('details' in data) || (data.details is string && data.details.size() <= 1000)) &&
+        (!('role' in data) || data.role in ['ADMIN', 'MANAGER', 'AGENT', 'VIEWER']) &&
+        (!('severity' in data) || data.severity in ['INFO', 'SECURITY', 'MUTATION', 'OVERRIDE']);
+    }
+
+    // User Profile RBAC & Private Data
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn() && isAdmin();
+      allow create: if isSignedIn() && isValidId(userId) && request.auth.uid == userId &&
+        isValidUserProfile(incoming()) && incoming().id == userId &&
+        (incoming().role in ['AGENT', 'VIEWER'] || isAdmin());
+      allow update: if isSignedIn() && isValidId(userId) && isValidUserProfile(incoming()) && (
+        isAdmin() ||
+        (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatar', 'team']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Incidents Collection
+    match /incidents/{incidentId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(incidentId) && isValidIncident(incoming());
+      allow update: if isSignedIn() && isValidId(incidentId) && isValidIncident(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Audit Logs (Append-only security trail)
+    match /auditLogs/{logId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(logId) && isValidAuditLog(incoming());
+      allow update, delete: if false;
+    }
+
+    // Admin Roster
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Connection Health Test Path
+    match /test/{docId} {
+      allow read: if isSignedIn();
+    }
+  }
+}

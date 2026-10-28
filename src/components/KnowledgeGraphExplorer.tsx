@@ -8,16 +8,18 @@ import {
   GitBranch, 
   Database, 
   FileText, 
-  AlertCircle, 
   Sparkles,
   Zap,
-  Info
+  Info,
+  Box
 } from 'lucide-react';
+import { ThreeMemoryScene } from './ThreeMemoryScene';
 
 export const KnowledgeGraphExplorer: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(MOCK_GRAPH_NODES[0]);
   const [nodeFilter, setNodeFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [graphMode, setGraphMode] = useState<'3D' | '2D'>('3D');
 
   const filteredNodes = MOCK_GRAPH_NODES.filter(node => {
     const matchesFilter = nodeFilter === 'ALL' || node.type === nodeFilter;
@@ -52,21 +54,48 @@ export const KnowledgeGraphExplorer: React.FC = () => {
             </p>
           </div>
 
-          {/* Filter pills */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {['ALL', 'SERVICE', 'DATABASE', 'INCIDENT', 'RUNBOOK'].map(type => (
+          {/* View mode switcher and Filter pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center p-1 bg-[#eaedff] rounded-lg border border-[#c3c0ff]">
               <button
-                key={type}
-                onClick={() => setNodeFilter(type)}
-                className={`px-2.5 py-1 text-xs font-mono rounded-md transition-colors ${
-                  nodeFilter === type 
-                    ? 'bg-[#3525cd] text-white' 
-                    : 'bg-[#f2f3ff] text-[#464555] hover:bg-[#eaedff]'
+                onClick={() => setGraphMode('3D')}
+                className={`px-3 py-1 text-xs font-mono font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                  graphMode === '3D'
+                    ? 'bg-[#3525cd] text-white shadow-xs'
+                    : 'text-[#464555] hover:text-[#131b2e]'
                 }`}
               >
-                {type}
+                <Box className="w-3.5 h-3.5" />
+                3D Spatial Graph
               </button>
-            ))}
+              <button
+                onClick={() => setGraphMode('2D')}
+                className={`px-3 py-1 text-xs font-mono font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                  graphMode === '2D'
+                    ? 'bg-[#3525cd] text-white shadow-xs'
+                    : 'text-[#464555] hover:text-[#131b2e]'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                2D Topo Schema
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1">
+              {['ALL', 'SERVICE', 'DATABASE', 'INCIDENT', 'RUNBOOK'].map(type => (
+                <button
+                  key={type}
+                  onClick={() => setNodeFilter(type)}
+                  className={`px-2 py-1 text-xs font-mono rounded-md transition-colors ${
+                    nodeFilter === type 
+                      ? 'bg-[#131b2e] text-white' 
+                      : 'bg-[#f2f3ff] text-[#464555] hover:bg-[#eaedff]'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -84,13 +113,22 @@ export const KnowledgeGraphExplorer: React.FC = () => {
       </div>
 
       {/* Main Graph Canvas and Inspector Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* SVG Graph Viewport */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-[#dae2fd] p-4 shadow-xs relative overflow-hidden min-h-[480px]">
-          <div className="absolute top-4 left-4 z-10 flex items-center space-x-2 text-xs font-mono bg-[#131b2e] text-[#dad7ff] px-3 py-1.5 rounded-lg shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>Interactive Graph Canvas · Click node to inspect</span>
-          </div>
+      {graphMode === '3D' ? (
+        <ThreeMemoryScene
+          heightClass="h-[640px]"
+          onSelectNode={(nodeId) => {
+            const match = MOCK_GRAPH_NODES.find(n => n.id === nodeId);
+            if (match) setSelectedNode(match);
+          }}
+        />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* SVG Graph Viewport */}
+          <div className="lg:col-span-2 bg-white rounded-xl border border-[#dae2fd] p-4 shadow-xs relative overflow-hidden min-h-[480px]">
+            <div className="absolute top-4 left-4 z-10 flex items-center space-x-2 text-xs font-mono bg-[#131b2e] text-[#dad7ff] px-3 py-1.5 rounded-lg shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>Interactive 2D Schema · Click node to inspect</span>
+            </div>
 
           {/* SVG Canvas */}
           <svg className="w-full h-[450px] select-none" viewBox="0 0 850 420">
@@ -292,6 +330,7 @@ export const KnowledgeGraphExplorer: React.FC = () => {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 };

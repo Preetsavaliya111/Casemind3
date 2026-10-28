@@ -1236,6 +1236,22 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               Verified by CaseMind Autonomous Safety Check: Risk level is <strong>LOW</strong> (Zero pod drops guaranteed by maxSurge=25%, maxUnavailable=0).
             </div>
 
+            {!(currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') ? (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-[#ba1a1a] flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 text-[#ba1a1a] shrink-0" />
+                <span>
+                  <strong>Access Restricted:</strong> Production safety gate authorization requires a <strong>MANAGER</strong> or <strong>ADMIN</strong> role. Your active role is <strong>{currentUser.role}</strong>. Please request approval from an Incident Manager.
+                </span>
+              </div>
+            ) : (
+              <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200 text-xs text-emerald-900 font-medium flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 text-[#059669] shrink-0" />
+                <span>
+                  Authorized by active <strong>{currentUser.role}</strong> session ({currentUser.name}).
+                </span>
+              </div>
+            )}
+
             <div className="flex items-center justify-end space-x-3 pt-2">
               <button
                 onClick={() => setSafetyGateModalStep(null)}
@@ -1244,8 +1260,9 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                 Cancel
               </button>
               <button
+                disabled={!(currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER')}
                 onClick={() => proceedStepExecution(safetyGateModalStep.id)}
-                className="px-4 py-2 text-xs font-bold text-white bg-[#ba1a1a] hover:bg-red-700 rounded-lg shadow-sm"
+                className="px-4 py-2 text-xs font-bold text-white bg-[#ba1a1a] hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg shadow-sm"
               >
                 Confirm & Execute in Production
               </button>

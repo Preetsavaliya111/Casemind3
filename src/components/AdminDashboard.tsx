@@ -56,6 +56,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      setUserFormError('Access Denied: Only ADMIN users can register new team members.');
+      return;
+    }
     if (!newUserName.trim() || !newUserEmail.trim()) {
       setUserFormError('Name and email are required fields.');
       return;
@@ -233,11 +237,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <option value="VIEWER">VIEWER</option>
                         </select>
                       ) : (
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          user.role === 'ADMIN' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-800'
-                        }`}>
-                          {user.role}
-                        </span>
+                        <div className="flex items-center space-x-1.5" title="Role modification locked: Requires ADMIN privileges">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                            user.role === 'ADMIN' ? 'bg-purple-100 text-purple-800' : user.role === 'MANAGER' ? 'bg-indigo-100 text-indigo-800' : user.role === 'AGENT' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'
+                          }`}>
+                            {user.role}
+                          </span>
+                          <Lock className="w-3 h-3 text-[#777587]" />
+                        </div>
                       )}
                     </td>
                     <td className="py-3 text-[#777587]">{user.activeSince}</td>
