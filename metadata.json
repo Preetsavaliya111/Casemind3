@@ -1,0 +1,8 @@
+{
+  "name": "CaseMind Intelligence",
+  "description": "Enterprise-grade cognitive operations platform for Tier-3 support engineers and incident managers with explainable AI root cause analysis, organizational memory graph, and verified autonomous runbooks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
